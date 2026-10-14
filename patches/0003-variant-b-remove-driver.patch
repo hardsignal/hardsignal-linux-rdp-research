@@ -1,0 +1,11 @@
+--- a/lamco-pipewire-0.6.13/src/pw_thread.rs
++++ b/lamco-pipewire-0.6.13/src/pw_thread.rs
+@@ -1989,7 +1989,7 @@
+         .connect(
+             Direction::Input,
+             None, // PW_ID_ANY - let PipeWire use node.target property
+-            StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS | StreamFlags::DRIVER | StreamFlags::RT_PROCESS,
++            StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS | StreamFlags::RT_PROCESS,
+             &mut params,
+         )
+         .map_err(|e| PipeWireError::ConnectionFailed(format!("Stream connect failed: {}", e)))?;

@@ -1,0 +1,18 @@
+--- a/lamco-rdp-server/Cargo.toml
++++ b/lamco-rdp-server/Cargo.toml
+@@ -500,2 +500,4 @@
+ [patch.crates-io]
++# Isolated DRIVER A/B experiment: verified 0.6.13 source plus diagnostics.
++lamco-pipewire = { path = "../lamco-pipewire-0.6.13" }
+ # Local development overrides (uncomment to use in-tree versions)
+--- a/lamco-rdp-server/Cargo.lock
++++ b/lamco-rdp-server/Cargo.lock
+@@ -3757,8 +3757,6 @@
+ [[package]]
+ name = "lamco-pipewire"
+ version = "0.6.13"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "f184ada837636b715661cb97aaf646e18f758a544f2bd5b2554c1cadf7cac8e9"
+ dependencies = [
+  "anyhow",
+  "futures",

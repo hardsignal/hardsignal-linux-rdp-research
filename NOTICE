@@ -1,0 +1,12 @@
+Hardsignal Linux RDP Research
+Copyright 2026 Hardsignal Labs
+
+This product includes research patches that refer to Lamco RDP Server and
+lamco-pipewire, developed by Lamco Development LLC. Lamco RDP Server patch
+context remains subject to its supplied Business Source License 1.1.
+
+This product refers to IronRDP, authored by Devolutions Inc. and Teleport.
+No complete upstream source or binary is included.
+
+See THIRD_PARTY_NOTICES.md and patches/README.md for the full attribution and
+licensing boundary.

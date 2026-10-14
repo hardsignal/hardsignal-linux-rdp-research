@@ -1,0 +1,40 @@
+VARIANT B — SANITISED DIAGNOSTIC EXCERPT
+Not a raw log. Timestamps and identifiers are removed.
+
+Source-derived effective connect flags (not runtime log output):
+  AUTOCONNECT | MAP_BUFFERS | RT_PROCESS
+
+Runtime-message caveat:
+  Both binary artifacts contain the same hardcoded message naming DRIVER.
+  That message is stale for Variant B; the source connect expression omits DRIVER.
+
+[state] PipeWire stream entered streaming state.
+
+[diagnostic sample]
+  streams=1
+  process_entries=392
+  buffers_dequeued=392
+  dequeues_empty=0
+  handoffs_ok=392
+  handoffs_full=0
+  handoffs_disconnected=0
+  receiver_delivered=392
+
+[later diagnostic sample]
+  streams=1
+  process_entries=14952
+  buffers_dequeued=14952
+  dequeues_empty=0
+  handoffs_ok=14952
+  handoffs_full=0
+  handoffs_disconnected=0
+  receiver_delivered=14952
+
+[pipeline] Remote client became active; pipeline frame processing resumed.
+[pipeline] Frame processing and remote-display sends continued.
+
+Operator observation:
+  The captured Linux desktop was visibly displayed on the iPad.
+
+Validation limit:
+  This run did not validate delivery while the desktop remained unchanged.

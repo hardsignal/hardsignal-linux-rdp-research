@@ -1,0 +1,38 @@
+VARIANT A — SANITISED DIAGNOSTIC EXCERPT
+Not a raw log. Repeated identical summaries are collapsed.
+
+Source-derived effective connect flags (not runtime log output):
+  AUTOCONNECT | MAP_BUFFERS | DRIVER | RT_PROCESS
+
+Runtime-message caveat:
+  Both binary artifacts contain the same hardcoded message naming DRIVER.
+  It agrees with Variant A's source but is stale for Variant B.
+
+Verified raw-log events:
+  The PipeWire stream entered streaming state.
+  The RDP client became active.
+  The server reported that no video frames were received.
+
+All 91 periodic diagnostic summaries remained at:
+  streams=1
+  process_entries=0
+  buffers_dequeued=0
+  dequeues_empty=0
+  handoffs_ok=0
+  handoffs_full=0
+  handoffs_disconnected=0
+  receiver_delivered=0
+
+Summary placement relative to client activation:
+  before_client_connection=43
+  after_client_connection=48
+
+Operator observation:
+  No captured desktop image was displayed at the RDP client.
+
+Private raw-log provenance:
+  sha256=b214b15bd14ca618aa50c102327da9f4091aebbec55af60c70a14207e18341ac
+  Sensitive raw contents are not published.
+
+Status note:
+  The final controlled repeat of Variant A remains pending.

@@ -1,0 +1,237 @@
+--- a/lamco-pipewire-0.6.13/src/pw_thread.rs
++++ b/lamco-pipewire-0.6.13/src/pw_thread.rs
+@@ -100,7 +100,7 @@
+ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+ use std::sync::{Arc as StdArc, mpsc as std_mpsc};
+ use std::thread::{self, JoinHandle};
+-use std::time::{Duration, SystemTime};
++use std::time::{Duration, Instant, SystemTime};
+ 
+ use pipewire::context::ContextBox;
+ use pipewire::loop_::Timeout;
+@@ -118,6 +118,50 @@
+ use crate::frame::{FrameFlags, VideoFrame};
+ use crate::stream::{PwStreamState, StreamConfig, StreamStateEvent};
+ 
++/// Experimental capture counters, cumulative across this manager's streams.
++/// Allocated before the PipeWire thread starts. The RT callback only performs
++/// native AtomicU64 operations (the experiment targets x86_64) and inspects the
++/// existing handoff result; it does not allocate, log, lock, or wait for metrics.
++#[derive(Default)]
++struct CaptureDiagnostics {
++    process_entries: AtomicU64,
++    buffers_dequeued: AtomicU64,
++    dequeues_empty: AtomicU64,
++    handoffs_ok: AtomicU64,
++    handoffs_full: AtomicU64,
++    handoffs_disconnected: AtomicU64,
++    receiver_delivered: AtomicU64,
++}
++
++impl CaptureDiagnostics {
++    #[inline]
++    fn record_handoff(&self, result: &std::result::Result<(), std_mpsc::TrySendError<VideoFrame>>) {
++        let counter = match result {
++            Ok(()) => &self.handoffs_ok,
++            Err(std_mpsc::TrySendError::Full(_)) => &self.handoffs_full,
++            Err(std_mpsc::TrySendError::Disconnected(_)) => &self.handoffs_disconnected,
++        };
++        counter.fetch_add(1, Ordering::Relaxed);
++    }
++
++    /// Called only on the PipeWire main-loop thread, never from process().
++    /// Individual loads are approximate concurrent samples, not a transaction.
++    fn report(&self, stream_count: usize) {
++        info!(
++            target: "hardsignal_capture_diag",
++            streams = stream_count,
++            process_entries = self.process_entries.load(Ordering::Relaxed),
++            buffers_dequeued = self.buffers_dequeued.load(Ordering::Relaxed),
++            dequeues_empty = self.dequeues_empty.load(Ordering::Relaxed),
++            handoffs_ok = self.handoffs_ok.load(Ordering::Relaxed),
++            handoffs_full = self.handoffs_full.load(Ordering::Relaxed),
++            handoffs_disconnected = self.handoffs_disconnected.load(Ordering::Relaxed),
++            receiver_delivered = self.receiver_delivered.load(Ordering::Relaxed),
++            "Lamco capture diagnostics: cumulative totals across all PipeWire streams"
++        );
++    }
++}
++
+ /// A cached mmap base pointer for a DMA-BUF FD.
+ ///
+ /// Wrapped so the cache can be shared between the PipeWire main-loop thread
+@@ -222,6 +266,9 @@
+     /// Frame channel receiver
+     frame_rx: std_mpsc::Receiver<VideoFrame>,
+ 
++    /// Shared counters for the isolated DRIVER experiment.
++    diagnostics: StdArc<CaptureDiagnostics>,
++
+     /// Stream state event receiver (state changes from PipeWire callbacks)
+     state_event_rx: std_mpsc::Receiver<StreamStateEvent>,
+ 
+@@ -271,6 +318,8 @@
+         let (state_event_tx, state_event_rx) = std_mpsc::sync_channel::<StreamStateEvent>(256);
+         let (shutdown_tx, shutdown_rx) = std_mpsc::sync_channel::<()>(1);
+ 
++        let diagnostics = StdArc::new(CaptureDiagnostics::default());
++        let diagnostics_for_thread = StdArc::clone(&diagnostics);
+         let corrupted_buffers = StdArc::new(AtomicU64::new(0));
+         let corrupted_for_thread = StdArc::clone(&corrupted_buffers);
+         let stream_tags: StdArc<parking_lot::RwLock<crate::tags::StreamTags>> =
+@@ -289,6 +338,7 @@
+                     shutdown_rx,
+                     corrupted_for_thread,
+                     tags_for_thread,
++                    diagnostics_for_thread,
+                 );
+             })
+             .map_err(|e| PipeWireError::InitializationFailed(format!("Thread spawn failed: {}", e)))?;
+@@ -299,6 +349,7 @@
+             thread_handle: Some(thread_handle),
+             command_tx,
+             frame_rx,
++            diagnostics,
+             state_event_rx,
+             shutdown_tx: Some(shutdown_tx),
+             direct_shutdown_flag: None,
+@@ -427,6 +478,7 @@
+             thread_handle: Some(thread_handle),
+             command_tx,
+             frame_rx,
++            diagnostics: StdArc::new(CaptureDiagnostics::default()),
+             state_event_rx,
+             shutdown_tx: Some(notify_shutdown_tx),
+             direct_shutdown_flag: Some(shutdown_flag),
+@@ -457,7 +509,11 @@
+     ///
+     /// Some(VideoFrame) if a frame is available, None otherwise
+     pub fn try_recv_frame(&self) -> Option<VideoFrame> {
+-        self.frame_rx.try_recv().ok()
++        let frame = self.frame_rx.try_recv().ok();
++        if frame.is_some() {
++            self.diagnostics.receiver_delivered.fetch_add(1, Ordering::Relaxed);
++        }
++        frame
+     }
+ 
+     /// Total buffers seen with `SPA_CHUNK_FLAG_CORRUPTED` since the manager
+@@ -540,7 +596,11 @@
+     ///
+     /// Some(VideoFrame) if received within timeout, None otherwise
+     pub fn recv_frame_timeout(&self, timeout: Duration) -> Option<VideoFrame> {
+-        self.frame_rx.recv_timeout(timeout).ok()
++        let frame = self.frame_rx.recv_timeout(timeout).ok();
++        if frame.is_some() {
++            self.diagnostics.receiver_delivered.fetch_add(1, Ordering::Relaxed);
++        }
++        frame
+     }
+ 
+     /// Shutdown the PipeWire thread gracefully
+@@ -606,6 +666,7 @@
+     shutdown_rx: std_mpsc::Receiver<()>,
+     corrupted_buffers: StdArc<AtomicU64>,
+     stream_tags: StdArc<parking_lot::RwLock<crate::tags::StreamTags>>,
++    diagnostics: StdArc<CaptureDiagnostics>,
+ ) {
+     info!("PipeWire main loop thread started");
+ 
+@@ -662,8 +723,15 @@
+ 
+     // Main event loop
+     let mut loop_iterations = 0u64;
++    let mut last_diagnostic_summary = Instant::now();
+     'main: loop {
+         loop_iterations += 1;
++
++        // Main-loop thread: report even when the RT callback never runs.
++        if last_diagnostic_summary.elapsed() >= Duration::from_secs(5) {
++            diagnostics.report(streams.len());
++            last_diagnostic_summary = Instant::now();
++        }
+ 
+         // Log periodic heartbeat
+         if loop_iterations.is_multiple_of(1000) {
+@@ -702,6 +770,7 @@
+                         StdArc::clone(&dmabuf_mmap_cache),
+                         StdArc::clone(&corrupted_buffers),
+                         StdArc::clone(&stream_tags),
++                        StdArc::clone(&diagnostics),
+                     );
+ 
+                     match result {
+@@ -1071,6 +1140,7 @@
+     dmabuf_cache: DmaBufCache,
+     corrupted_buffers: StdArc<AtomicU64>,
+     stream_tags: StdArc<parking_lot::RwLock<crate::tags::StreamTags>>,
++    diagnostics: StdArc<CaptureDiagnostics>,
+ ) -> Result<ManagedStream> {
+     // Built up front (pure function of config, no PipeWire object dependency)
+     // so the offered-format summary is available to capture into the
+@@ -1115,6 +1185,7 @@
+     // Set up comprehensive stream event listeners
+     // Clone frame_tx and dmabuf_cache for use in closures
+     let frame_tx_for_process = frame_tx.clone();
++    let proc_diagnostics = diagnostics;
+     let stream_id_for_callbacks = stream_id;
+     let dmabuf_cache_for_process = StdArc::clone(&dmabuf_cache);
+     let dmabuf_cache_for_remove = StdArc::clone(&dmabuf_cache);
+@@ -1342,6 +1413,7 @@
+             }
+         })
+         .process(move |stream, _user_data| {
++            proc_diagnostics.process_entries.fetch_add(1, Ordering::Relaxed);
+             // This callback is called when a new frame buffer is available
+             trace!("process() callback fired for stream {}", stream_id_for_callbacks);
+ 
+@@ -1352,8 +1424,12 @@
+             // itself on drop, so no manual queue guard is needed. `None` means the
+             // stream's buffer queue is currently empty.
+             let mut buffer = match stream.dequeue_buffer() {
+-                Some(buffer) => buffer,
++                Some(buffer) => {
++                    proc_diagnostics.buffers_dequeued.fetch_add(1, Ordering::Relaxed);
++                    buffer
++                }
+                 None => {
++                    proc_diagnostics.dequeues_empty.fetch_add(1, Ordering::Relaxed);
+                     debug!(
+                         "No buffer available (dequeue returned None) for stream {}",
+                         stream_id_for_callbacks
+@@ -1649,7 +1725,9 @@
+                                                 flags,
+                                             };
+ 
+-                                            if let Err(e) = frame_tx_for_process.try_send(frame) {
++                                            let handoff_result = frame_tx_for_process.try_send(frame);
++                                            proc_diagnostics.record_handoff(&handoff_result);
++                                            if let Err(e) = handoff_result {
+                                                 warn!("Failed to send DMA-BUF frame: {} (backpressure)", e);
+                                             }
+                                             // Return None to skip the normal pixel_data path
+@@ -1783,13 +1861,6 @@
+                                 config.preferred_format.unwrap_or(PixelFormat::BGRx)
+                             );
+ 
+-                            // Log first 32 bytes as hex to verify byte order
+-                            if pixel_data.len() >= 32 {
+-                                let hex_preview: Vec<String> =
+-                                    pixel_data[0..32].iter().map(|b| format!("{:02x}", b)).collect();
+-                                info!(" First 32 bytes (hex): {}", hex_preview.join(" "));
+-                            }
+-
+                             // Log stream timing from pw_stream_get_time_n
+                             if let Some(ref t) = stream_time {
+                                 info!(
+@@ -1864,7 +1935,9 @@
+                         };
+ 
+                         // Send frame to async runtime
+-                        if let Err(e) = frame_tx_for_process.try_send(frame) {
++                        let handoff_result = frame_tx_for_process.try_send(frame);
++                        proc_diagnostics.record_handoff(&handoff_result);
++                        if let Err(e) = handoff_result {
+                             warn!("Failed to send frame: {} (channel full, backpressure)", e);
+                         } else {
+                             debug!("Frame sent to async runtime");

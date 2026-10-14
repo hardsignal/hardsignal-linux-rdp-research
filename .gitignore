@@ -1,0 +1,56 @@
+# Build output and dependency material
+target/
+build/
+dist/
+vendor/
+cargo-home/
+*.crate
+*.flatpak
+*.AppImage
+*.deb
+*.rpm
+
+# Binaries and debug artifacts
+*.bin
+*.exe
+*.dll
+*.so
+*.so.*
+*.dylib
+*.a
+*.o
+*.pdb
+*.dSYM/
+
+# Raw diagnostics and captures
+*.log
+*.trace
+*.pcap
+*.pcapng
+*.dump
+*.raw
+*.h264
+*.yuv
+
+# Secrets and private configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*credentials*
+*secret*
+*token*
+config.local.*
+private/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

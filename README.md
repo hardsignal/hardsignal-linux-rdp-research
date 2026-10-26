@@ -45,6 +45,10 @@ Not yet established: general causality across PipeWire implementations, composit
 - [`evidence/`](evidence/) — sanitised, non-verbatim diagnostic excerpts only.
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — upstream attribution.
 
+## Related case study
+
+- [`docs/cosmic-portal-memory-growth.md`](docs/cosmic-portal-memory-growth.md) — idle memory growth in the COSMIC desktop portal during a long-lived RDP capture session. It is a separate investigation, the leak remains unfixed and unattributed, and it does not alter the DRIVER A/B results or pending work above.
+
 ## Scope and exclusions
 
 This is a research record, not a Lamco distribution and not an installation bundle. It does not include or grant rights to Lamco products, third-party dependencies, binaries, private build caches, raw logs, live configuration, or secrets. Obtain upstream sources and dependencies from their authorised distribution channels and comply with their licences.
